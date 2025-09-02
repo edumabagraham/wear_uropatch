@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore')
 
 class NestedCVOptimizer:
     def __init__(self, X, y, groups, positive_class="void", n_outer_folds=5, n_inner_folds=3,
-                n_trials=50, random_state=42):
+                 n_trials=50, random_state=42):
         """
         Nested cross-validation optimizer for binary classification
         with RandomForest, XGBoost, and DecisionTree.
@@ -48,7 +48,7 @@ class NestedCVOptimizer:
         self.outer_cv = StratifiedGroupKFold(n_splits=n_outer_folds, shuffle=True, random_state=random_state)
         self.inner_cv = StratifiedGroupKFold(n_splits=n_inner_folds, shuffle=True, random_state=random_state)
 
-        # Results storage - now properly structured per model per fold
+        
         self.models = ['rf', 'xgb', 'dt']
         self.outer_scores = {model: [] for model in self.models}
         self.best_params_per_fold = {model: [] for model in self.models}
@@ -164,6 +164,9 @@ class NestedCVOptimizer:
                 'precision_positive': 0.0, 'recall_positive': 0.0, 'f1_positive': 0.0,
                 'precision_negative': 0.0, 'recall_negative': 0.0, 'f1_negative': 0.0
             }
+            
+            
+    # This is where the inner hyperparameter tuning happens
 
     def optimize_model(self, model_name: str, X_train_outer, y_train_outer, groups_train_outer) -> Tuple[Dict, optuna.Study]:
         """Optimize hyperparameters for a specific model using inner CV."""
@@ -190,7 +193,7 @@ class NestedCVOptimizer:
                         model.fit(X_train_inner, y_train_inner)
 
                     y_pred = model.predict(X_val_inner)
-                    # For binary classification, we can optimize on F1 score of positive class or accuracy
+                    # For binary classification, we can optimize on F1 score of positive class (void)
                     score = f1_score(y_val_inner, y_pred, pos_label=self.positive_class_encoded, zero_division=0)
                     fold_scores.append(score)
                     
@@ -318,7 +321,7 @@ class NestedCVOptimizer:
         # Find best model based on F1 score of positive class
         if summaries:
             best_model = max(summaries.keys(), 
-                           key=lambda x: summaries[x]['mean_scores'].get('f1_positive', 0))
+                        key=lambda x: summaries[x]['mean_scores'].get('f1_positive', 0))
             best_f1_positive = summaries[best_model]['mean_scores']['f1_positive']
             best_accuracy = summaries[best_model]['mean_scores']['accuracy']
             
@@ -376,14 +379,14 @@ class NestedCVOptimizer:
                     'F1_Weighted': round(fold_metrics.get('f1_weighted', 0.0), 4),
                     
                     # Binary classification metrics for positive class ('void')
-                    'Precision': round(fold_metrics.get('precision_positive', 0.0), 4),
-                    'Recall': round(fold_metrics.get('recall_positive', 0.0), 4),
-                    'F1': round(fold_metrics.get('f1_positive', 0.0), 4),
+                    'Precision_Positive': round(fold_metrics.get('precision_positive', 0.0), 4),
+                    'Recall_Positive': round(fold_metrics.get('recall_positive', 0.0), 4),
+                    'F1_Positive': round(fold_metrics.get('f1_positive', 0.0), 4),
                     
                     # Binary classification metrics for negative class ('non-void')
-                    'Precision_Non-Void': round(fold_metrics.get('precision_negative', 0.0), 4),
-                    'Recall_Non-Void': round(fold_metrics.get('recall_negative', 0.0), 4),
-                    'F1_Non-Void': round(fold_metrics.get('f1_negative', 0.0), 4),
+                    'Precision_Negative': round(fold_metrics.get('precision_negative', 0.0), 4),
+                    'Recall_Negative': round(fold_metrics.get('recall_negative', 0.0), 4),
+                    'F1_Negative': round(fold_metrics.get('f1_negative', 0.0), 4),
                     
                     'Best_Params': str(best_params)  # As string for easy viewing
                 }
@@ -397,15 +400,27 @@ class NestedCVOptimizer:
         # Create DataFrame
         results_df = pd.DataFrame(results_data)
         
+        # Debug: Print column names to see what's actually in the DataFrame
+        print("Columns in results_df:", list(results_df.columns))
+        
         # Add summary rows
         summary_data = []
-        metric_columns = ['Accuracy', 'Precision_Macro', 'Recall_Macro', 'F1_Macro', 
-                         'Precision_Weighted', 'Recall_Weighted', 'F1_Weighted',
-                         'Precision_Positive', 'Recall_Positive', 'F1_Positive',
-                         'Precision_Negative', 'Recall_Negative', 'F1_Negative']
+        # Only include metrics that actually exist in the DataFrame
+        all_metric_columns = ['Accuracy', 'Precision_Macro', 'Recall_Macro', 'F1_Macro', 
+                            'Precision_Weighted', 'Recall_Weighted', 'F1_Weighted',
+                            'Precision_Positive', 'Recall_Positive', 'F1_Positive',
+                            'Precision_Negative', 'Recall_Negative', 'F1_Negative']
+        
+        # Filter to only include columns that exist in the DataFrame
+        metric_columns = [col for col in all_metric_columns if col in results_df.columns]
+        print("Available metric columns:", metric_columns)
         
         for model_name in self.models:
             model_data = results_df[results_df['Model'] == model_name.upper()]
+            
+            if model_data.empty:
+                print(f"Warning: No data found for model {model_name}")
+                continue
             
             # Mean row
             mean_row = {
@@ -414,7 +429,10 @@ class NestedCVOptimizer:
                 'Best_Params': 'N/A'
             }
             for metric in metric_columns:
-                mean_row[metric] = round(model_data[metric].mean(), 4)
+                if metric in model_data.columns:
+                    mean_row[metric] = round(model_data[metric].mean(), 4)
+                else:
+                    mean_row[metric] = 0.0
             summary_data.append(mean_row)
             
             # Std row  
@@ -424,11 +442,17 @@ class NestedCVOptimizer:
                 'Best_Params': 'N/A'
             }
             for metric in metric_columns:
-                std_row[metric] = round(model_data[metric].std(), 4)
+                if metric in model_data.columns:
+                    std_row[metric] = round(model_data[metric].std(), 4)
+                else:
+                    std_row[metric] = 0.0
             summary_data.append(std_row)
         
         # Combine all results
-        summary_df = pd.DataFrame(summary_data)
-        final_df = pd.concat([results_df, summary_df], ignore_index=True)
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            final_df = pd.concat([results_df, summary_df], ignore_index=True)
+        else:
+            final_df = results_df
         
         return final_df

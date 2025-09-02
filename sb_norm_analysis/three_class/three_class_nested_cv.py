@@ -282,14 +282,14 @@ class NestedCVOptimizer:
                     if metric in scores_df.columns:
                         mean_val = scores_df[metric].mean()
                         std_val = scores_df[metric].std()
-                        print(f"{metric:15}: {mean_val:.4f} ± {std_val:.4f}")
+                        print(f"{metric:15}: {mean_val:.4f} Â± {std_val:.4f}")
                 
                 print(f"Individual fold accuracies: {[f'{score:.4f}' for score in scores_df['accuracy'].tolist()]}")
 
         # Find best model
         if summaries:
             best_model = max(summaries.keys(), 
-                        key=lambda x: summaries[x]['mean_scores'].get('accuracy', 0))
+                           key=lambda x: summaries[x]['mean_scores'].get('accuracy', 0))
             best_accuracy = summaries[best_model]['mean_scores']['accuracy']
             
             print(f"\n{'='*80}")
@@ -387,5 +387,3 @@ class NestedCVOptimizer:
         final_df = pd.concat([results_df, summary_df], ignore_index=True)
         
         return final_df
-
-
