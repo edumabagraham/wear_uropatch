@@ -12,7 +12,7 @@ from scipy.stats import skew, kurtosis
 
 # Sliding window feature extraction
 class GenerateFeatures:
-    def __init__(self, fs=70, window_duration=1.0, overlap=0.8, window_type='rectangular'):
+    def __init__(self, fs=50, window_duration=1.0, overlap=0.8, window_type='rectangular'):
         self.window_duration = window_duration
         self.overlap = overlap
         self.fs = fs

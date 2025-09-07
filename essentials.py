@@ -5,7 +5,7 @@ from tqdm import tqdm
 from scipy.signal import resample, medfilt, butter, filtfilt, lfilter, welch
 import copy
     
-def resample_data(data: dict, target_fs: int = 70):
+def resample_data(data: dict, target_fs: int = 50):
     """Resamples time-series data within a dictionary of pandas DataFrames.
 
     This function iterates through each DataFrame in the input dictionary,
@@ -20,7 +20,7 @@ def resample_data(data: dict, target_fs: int = 70):
         data (dict): A dictionary where keys are unique identifiers and values
             are pandas DataFrames. Each DataFrame must contain a 'time' column.
         target_fs (int, optional): The target sampling frequency in Hz.
-            Defaults to 70.
+            Defaults to 50.
 
     Returns:
         dict: A new dictionary with the same keys as the input, containing
@@ -29,11 +29,9 @@ def resample_data(data: dict, target_fs: int = 70):
     resampled_dict = {}
     for i, void_instance in tqdm(enumerate(data.keys())):
         old_df = data[void_instance]
-        # old_df.drop(columns=['Real time', 'acc_x', 'acc_y', 'acc_z'], axis = 1, inplace=True)
-        # old_df.drop(columns=['Real time', 'gyr_x', 'gyr_y', 'gyr_z'], axis = 1, inplace=True)
         old_df.drop(columns=['Real time'], axis = 1, inplace=True)
         
-        original_fs = 1 / old_df['time'].diff().mean()
+        original_fs = 1 / old_df['time'].diff().median()
         num_samples = int(len(old_df) * target_fs / original_fs)
         
         resampled_data = resample(old_df, num_samples)
@@ -112,32 +110,32 @@ def two_class_labels(df: pd.DataFrame, gt: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def preprocess_data(data):
-    """Complete preprocessing pipeline matching Anguita et al.'s methodology."""
-    # 1. Apply median filter
-    for col in ['acc_x', 'acc_y', 'acc_z', 'gyr_x', 'gyr_y', 'gyr_z']:
-        data[col] = medfilt(data[col], kernel_size=3)
+# def preprocess_data(data):
+#     """Complete preprocessing pipeline matching Anguita et al.'s methodology."""
+#     # 1. Apply median filter
+#     for col in ['acc_x', 'acc_y', 'acc_z', 'gyr_x', 'gyr_y', 'gyr_z']:
+#         data[col] = medfilt(data[col], kernel_size=3)
     
-    time = data['time']
+#     time = data['time']
     
-    fs = 1 / data['time'].diff().median() # sampling frequency
+#     fs = 1 / data['time'].diff().median() # sampling frequency
     
-    # 2. Butterworth Low-Pass (20Hz cutoff)
-    def butter_lowpass_filter(data, cutoff, fs, order=4):
-        nyq = 0.5 * fs
-        normal_cutoff = cutoff / nyq
-        b, a = butter(order, normal_cutoff, btype='low', analog=False) # type: ignore
-        y = filtfilt(b, a, data, axis=0)  # Zero-phase filtering
-        return y
+#     # 2. Butterworth Low-Pass (20Hz cutoff)
+#     def butter_lowpass_filter(data, cutoff, fs, order=4):
+#         nyq = 0.5 * fs
+#         normal_cutoff = cutoff / nyq
+#         b, a = butter(order, normal_cutoff, btype='low', analog=False) # type: ignore
+#         y = filtfilt(b, a, data, axis=0)  # Zero-phase filtering
+#         return y
     
-    data['acc_x'] = butter_lowpass_filter(data['acc_x'], 20, fs)
-    data['acc_y'] = butter_lowpass_filter(data['acc_y'], 20, fs)
-    data['acc_z'] = butter_lowpass_filter(data['acc_z'], 20, fs)
-    data['gyr_x'] = butter_lowpass_filter(data['gyr_x'], 20, fs)
-    data['gyr_y'] = butter_lowpass_filter(data['gyr_y'], 20, fs)
-    data['gyr_z'] = butter_lowpass_filter(data['gyr_z'], 20, fs)
+#     data['acc_x'] = butter_lowpass_filter(data['acc_x'], 20, fs)
+#     data['acc_y'] = butter_lowpass_filter(data['acc_y'], 20, fs)
+#     data['acc_z'] = butter_lowpass_filter(data['acc_z'], 20, fs)
+#     data['gyr_x'] = butter_lowpass_filter(data['gyr_x'], 20, fs)
+#     data['gyr_y'] = butter_lowpass_filter(data['gyr_y'], 20, fs)
+#     data['gyr_z'] = butter_lowpass_filter(data['gyr_z'], 20, fs)
     
-    return data
+#     return data
 
 
 def preprocess_data_separate_acc_gravity(data):
@@ -177,7 +175,7 @@ def preprocess_data_separate_acc_gravity(data):
     
     # Subtracting this from the original acceleration gives the acceleration due motion
     data['acc_x'] = acc_x - grav_x
-    data['acc_x'] = acc_y - grav_y
-    data['acc_x'] = acc_z - grav_z
+    data['acc_y'] = acc_y - grav_y
+    data['acc_z'] = acc_z - grav_z
     
     return data
