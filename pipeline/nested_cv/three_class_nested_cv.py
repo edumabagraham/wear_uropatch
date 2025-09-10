@@ -95,7 +95,7 @@ class NestedCVOptimizer:
             return RandomForestClassifier(
                 n_estimators=params['n_estimators'],
                 max_depth=params['max_depth'],
-                min_samples_split=params['min_samples_split'],
+                min_samples_split=params['min_samples_split'],log
                 min_samples_leaf=params['min_samples_leaf'],
                 max_features=params['max_features'],
                 bootstrap=params['bootstrap'],

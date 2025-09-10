@@ -198,3 +198,17 @@ class GenerateFeatures:
         if self.all_labels is not None and len(self.all_labels) == len(df):
             df['label'] = self.all_labels
         return df
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+

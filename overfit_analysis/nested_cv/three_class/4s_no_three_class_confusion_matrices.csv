@@ -1,0 +1,16 @@
+,Model,Fold,CM_post-void_pred_post-void,CM_post-void_pred_pre-void,CM_post-void_pred_void,CM_pre-void_pred_post-void,CM_pre-void_pred_pre-void,CM_pre-void_pred_void,CM_void_pred_post-void,CM_void_pred_pre-void,CM_void_pred_void
+0,RF,1,11,1,3,9,6,8,3,2,42
+1,RF,2,38,9,33,16,8,18,4,1,34
+2,RF,3,27,11,5,11,14,7,17,6,29
+3,RF,4,8,7,21,4,9,5,15,6,11
+4,RF,5,17,2,13,6,9,10,14,2,51
+5,XGB,1,11,0,4,14,0,9,8,0,39
+6,XGB,2,33,13,34,15,9,18,4,1,34
+7,XGB,3,29,9,5,13,11,8,27,2,23
+8,XGB,4,7,5,24,4,8,6,5,5,22
+9,XGB,5,19,0,13,10,5,10,11,2,54
+10,DT,1,15,0,0,23,0,0,47,0,0
+11,DT,2,8,10,62,2,5,35,0,0,39
+12,DT,3,0,19,24,0,11,21,0,2,50
+13,DT,4,5,2,29,6,3,9,4,3,25
+14,DT,5,23,0,9,18,0,7,27,0,40

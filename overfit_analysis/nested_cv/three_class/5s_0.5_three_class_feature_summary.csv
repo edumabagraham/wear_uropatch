@@ -1,0 +1,16 @@
+,Model,Fold,K_Parameter,N_Features_Selected,Score_Function,Feature_Proportion
+0,RF,1,all,36,f_classif,1.0
+1,RF,2,all,36,f_classif,1.0
+2,RF,3,all,36,f_classif,1.0
+3,RF,4,all,36,f_classif,1.0
+4,RF,5,28,28,f_classif,0.778
+5,XGB,1,7,7,f_classif,0.194
+6,XGB,2,3,3,f_classif,0.083
+7,XGB,3,all,36,f_classif,1.0
+8,XGB,4,all,36,f_classif,1.0
+9,XGB,5,18,18,f_classif,0.5
+10,DT,1,25,25,f_classif,0.694
+11,DT,2,18,18,f_classif,0.5
+12,DT,3,7,7,f_classif,0.194
+13,DT,4,3,3,f_classif,0.083
+14,DT,5,18,18,f_classif,0.5
