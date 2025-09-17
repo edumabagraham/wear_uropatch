@@ -8,3 +8,5 @@ __pycache__/
 .vscode/
 *.log
 global_normalization/extracted_features/
+global_normalization/global_norm_extracted_features.pkl
+*.pkl
