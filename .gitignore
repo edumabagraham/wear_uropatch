@@ -8,6 +8,5 @@ __pycache__/
 .vscode/
 *.log
 global_normalization/extracted_features/
-images/
 
 
