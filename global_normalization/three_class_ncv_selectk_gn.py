@@ -15,6 +15,7 @@ import warnings
 from typing import Dict, List, Any, Tuple
 from sklearn.metrics import confusion_matrix
 import os
+import seaborn as sns
 warnings.filterwarnings('ignore')
 
 class ModifiedNestedCVOptimizer:
@@ -49,6 +50,7 @@ class ModifiedNestedCVOptimizer:
         # Models to evaluate
         self.models = ['rf', 'xgb', 'dt']
         
+        self.confusion_matrices = {model: [] for model in self.models}
         # Results storage (per configuration)
         self.current_config_results = []
         self.all_configurations_results = {}
@@ -313,6 +315,47 @@ class ModifiedNestedCVOptimizer:
         study.optimize(objective, n_trials=self.n_trials, show_progress_bar=False)
         
         return study.best_params, study.best_value
+    
+    def calculate_confusion_matrix(self, y_true, y_pred, fold_idx: int, model_name: str) -> np.ndarray:
+        """
+        Calculate and store confusion matrix for the current fold.
+        
+        Args:
+            y_true: True labels (encoded)
+            y_pred: Predicted labels (encoded)
+            fold_idx: Current fold index
+            model_name: Name of the model
+            
+        Returns:
+            Confusion matrix as numpy array
+        """
+        try:
+            # Calculate confusion matrix
+            cm = confusion_matrix(y_true, y_pred)
+            
+            # Store with metadata
+            cm_data = {
+                'fold': fold_idx,
+                'model': model_name,
+                'confusion_matrix': cm,
+                'true_labels': y_true,
+                'pred_labels': y_pred
+            }
+            
+            return cm_data
+            
+        except Exception as e:
+            print(f"Warning: Error calculating confusion matrix for {model_name} fold {fold_idx}: {e}")
+            # Return empty matrix with appropriate shape
+            n_classes = len(np.unique(y_true)) if len(np.unique(y_true)) > 0 else 2
+            empty_cm = np.zeros((n_classes, n_classes), dtype=int)
+            return {
+                'fold': fold_idx,
+                'model': model_name,
+                'confusion_matrix': empty_cm,
+                'true_labels': y_true,
+                'pred_labels': y_pred
+            }
 
     def evaluate_single_fold(self, fold_data: Dict) -> List[Dict]:
         """Evaluate all models on a single fold's pre-split data."""
@@ -383,6 +426,10 @@ class ModifiedNestedCVOptimizer:
                 y_pred = final_model.predict(X_test)
                 y_proba = final_model.predict_proba(X_test)
                 
+                # Calculate and store confusion matrix
+                cm_data = self.calculate_confusion_matrix(y_test_encoded, y_pred, fold_id, model_name)
+                self.confusion_matrices[model_name].append(cm_data)
+                
                 # Calculate comprehensive metrics
                 metrics = self.calculate_comprehensive_metrics(y_test_encoded, y_pred, y_proba)
                 
@@ -423,7 +470,7 @@ class ModifiedNestedCVOptimizer:
                 
                 fold_results.append(result)
                 
-                print(f"      Acc: {metrics['accuracy']:.4f}, F1(+): {metrics['f1_Macro']:.4f}, AUC: {metrics['auc']:.4f}")
+                print(f"      Acc: {metrics['accuracy']:.4f}, F1(+): {metrics['f1_macro']:.4f}, AUC: {metrics['auc']:.4f}")
                 
             except Exception as e:
                 print(f"      Error with {model_name.upper()}: {e}")
@@ -724,3 +771,100 @@ class ModifiedNestedCVOptimizer:
         return comparison_df.sort_values('F1_Macro_Mean', ascending=False)
 
 
+    def plot_confusion_matrices(self, save_path: str = None, figsize: Tuple[int, int] = (15, 10)):
+        """
+        Plot confusion matrices for all models.
+        Shows both individual fold matrices and aggregated matrices.
+        """
+        n_models = len(self.models)
+        
+        # Create subplots: 2 rows (individual folds + aggregated), n_models columns
+        fig, axes = plt.subplots(2, n_models, figsize=figsize)
+        if n_models == 1:
+            axes = axes.reshape(2, 1)
+        
+        # For 3-class implementation, use class names
+        if hasattr(self, 'class_names'):
+            class_labels = self.class_names
+
+        for model_idx, model_name in enumerate(self.models):
+            if not self.confusion_matrices[model_name]:
+                continue
+                
+            # Plot 1: Individual fold matrices (small multiples)
+            cms = [cm_data['confusion_matrix'] for cm_data in self.confusion_matrices[model_name]]
+            
+            if cms:
+                # Show aggregated confusion matrix (sum across folds)
+                aggregated_cm = np.sum(cms, axis=0)
+                
+                # Normalize for display (showing percentages)
+                cm_normalized = aggregated_cm.astype('float') / aggregated_cm.sum(axis=1)[:, np.newaxis]
+                
+                # Plot aggregated confusion matrix
+                sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                        xticklabels=class_labels, yticklabels=class_labels,
+                        ax=axes[0, model_idx], cbar_kws={'label': 'Proportion'})
+                axes[0, model_idx].set_title(f'{model_name.upper()}: Aggregated CM\n(Normalized)')
+                axes[0, model_idx].set_xlabel('Predicted')
+                axes[0, model_idx].set_ylabel('True')
+                
+                # Plot aggregated confusion matrix with raw counts
+                sns.heatmap(aggregated_cm, annot=True, fmt='d', cmap='Oranges',
+                        xticklabels=class_labels, yticklabels=class_labels,
+                        ax=axes[1, model_idx], cbar_kws={'label': 'Count'})
+                axes[1, model_idx].set_title(f'{model_name.upper()}: Aggregated CM\n(Raw Counts)')
+                axes[1, model_idx].set_xlabel('Predicted')
+                axes[1, model_idx].set_ylabel('True')
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Confusion matrices saved to: {save_path}")
+        else:
+            plt.show()
+            
+    
+    def plot_individual_fold_cms(self, model_name: str, save_path: str = None, figsize: Tuple[int, int] = (12, 4)):
+        """
+        Plot confusion matrices for each fold of a specific model.
+        """
+        if model_name not in self.confusion_matrices or not self.confusion_matrices[model_name]:
+            print(f"No confusion matrices available for model: {model_name}")
+            return
+        
+        n_folds = len(self.confusion_matrices[model_name])
+        fig, axes = plt.subplots(1, n_folds, figsize=figsize)
+        if n_folds == 1:
+            axes = [axes]
+        
+        # Determine class labels
+        if hasattr(self, 'class_names'):
+            class_labels = self.class_names
+        else:
+            # class_labels = [f'Not_{self.positive_class}', self.positive_class]
+            pass
+        
+        for fold_idx, cm_data in enumerate(self.confusion_matrices[model_name]):
+            cm = cm_data['confusion_matrix']
+            
+            # Normalize confusion matrix
+            cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+            
+            sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                    xticklabels=class_labels, yticklabels=class_labels,
+                    ax=axes[fold_idx], cbar=fold_idx == n_folds-1)
+            axes[fold_idx].set_title(f'Fold {fold_idx + 1}')
+            axes[fold_idx].set_xlabel('Predicted')
+            if fold_idx == 0:
+                axes[fold_idx].set_ylabel('True')
+        
+        plt.suptitle(f'{model_name.upper()}: Confusion Matrices by Fold')
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Individual fold confusion matrices saved to: {save_path}")
+        else:
+            plt.show()
