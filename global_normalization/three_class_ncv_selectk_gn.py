@@ -386,6 +386,9 @@ class ModifiedNestedCVOptimizer:
                 # Calculate comprehensive metrics
                 metrics = self.calculate_comprehensive_metrics(y_test_encoded, y_pred, y_proba)
                 
+                auc_data = self.calculate_auc_scores(y_test_encoded, y_proba, fold_id, model_name)
+
+                
                 # Store result in exact format of your original pipeline
                 result = {
                     'Model': f"{model_name.upper()}", 
@@ -397,7 +400,8 @@ class ModifiedNestedCVOptimizer:
                     'Precision_Weighted': round(metrics['precision_weighted'], 4),
                     'Recall_Weighted': round(metrics['recall_weighted'], 4),
                     'F1_Weighted': round(metrics['f1_weighted'], 4),
-                    'AUC': round(metrics['auc'], 4),
+                    'AUC_Macro': round(auc_data['macro_auc'], 4),
+                    'AUC_Micro': round(auc_data['micro_auc'], 4),
                     
                     # Feature selection info
                     'Features_K': best_params.get('selector__k', 'N/A'),
@@ -411,7 +415,7 @@ class ModifiedNestedCVOptimizer:
                     result[f'Precision_{class_name}'] = round(metrics.get(f'precision_{class_name}', 0.0), 4)
                     result[f'Recall_{class_name}'] = round(metrics.get(f'recall_{class_name}', 0.0), 4)
                     result[f'F1_{class_name}'] = round(metrics.get(f'f1_{class_name}', 0.0), 4)
-                    result[f'AUC_{class_name}'] = round(auc.get(f'auc_{class_name}', 0.0), 4)
+                    result[f'AUC_{class_name}'] = round(auc_data.get(f'auc_{class_name}', 0.0), 4)
                     
                 # Add each hyperparameter as a separate column for easier analysis
                 for param_name, param_value in best_params.items():
