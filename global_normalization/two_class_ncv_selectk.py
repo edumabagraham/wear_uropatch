@@ -444,7 +444,7 @@ class ModifiedNestedCVOptimizer:
         sorted_results = []
         
         for model_name in self.models:
-            model_results = [r for r in self.current_config_results if r['Model'] == model_name]
+            model_results = [r for r in self.current_config_results if r['Model'] == model_name.upper()]
             model_results.sort(key=lambda x: x['Fold'])  # Sort by fold number
             sorted_results.extend(model_results)
             
@@ -592,7 +592,6 @@ class ModifiedNestedCVOptimizer:
                     'Model': row['Model'],
                     'Accuracy': row['Accuracy'],
                     'F1_Positive': row['F1_Positive'],
-                    # 'AUC': row['AUC'],
                     'Precision_Positive': row['Precision_Positive'],
                     'Recall_Positive': row['Recall_Positive']
                 })
@@ -607,7 +606,7 @@ class ModifiedNestedCVOptimizer:
             print(f"Overall comparison saved: {comparison_path}")
             print(f"\nTOP 5 PERFORMERS:")
             print("-" * 60)
-            top_performers = comparison_df.head()[['Configuration', 'Model', 'F1_Positive', 'Accuracy', 'AUC']]
+            top_performers = comparison_df.head()[['Configuration', 'Model', 'F1_Positive', 'Accuracy']]
             print(top_performers.to_string(index=False))
 
     def get_best_configuration(self) -> Tuple[str, str, float]:
@@ -763,8 +762,8 @@ class ModifiedNestedCVOptimizer:
         if hasattr(self, 'class_names'):
             class_labels = self.class_names
         else:
-            # class_labels = [f'Not_{self.positive_class}', self.positive_class]
-            pass
+            class_labels = [f'Not_{self.positive_class}', self.positive_class]
+            
         
         for fold_idx, cm_data in enumerate(self.confusion_matrices[model_name]):
             cm = cm_data['confusion_matrix']
