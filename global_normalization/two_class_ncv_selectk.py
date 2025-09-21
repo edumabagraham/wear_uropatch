@@ -683,8 +683,6 @@ class ModifiedNestedCVOptimizer:
                     'Accuracy_Std': std_values['Accuracy'] if std_values is not None else 0.0,
                     'F1_Positive_Mean': mean_row['F1_Positive'],
                     'F1_Positive_Std': std_values['F1_Positive'] if std_values is not None else 0.0,
-                    'AUC_Mean': mean_row['AUC'],
-                    'AUC_Std': std_values['AUC'] if std_values is not None else 0.0
                 })
         
         comparison_df = pd.DataFrame(comparison_data)
@@ -704,7 +702,7 @@ class ModifiedNestedCVOptimizer:
         
         # For 3-class implementation, use class names
         if hasattr(self, 'class_names'):
-            class_labels = self.class_names
+            class_labels = [f'Not_{self.positive_class}', self.positive_class]
 
         for model_idx, model_name in enumerate(self.models):
             if not self.confusion_matrices[model_name]:
