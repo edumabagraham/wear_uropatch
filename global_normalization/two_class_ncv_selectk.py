@@ -15,6 +15,7 @@ import warnings
 from typing import Dict, List, Any, Tuple
 from sklearn.metrics import confusion_matrix
 import os
+import seaborn as sns
 warnings.filterwarnings('ignore')
 
 class ModifiedNestedCVOptimizer:
@@ -51,6 +52,7 @@ class ModifiedNestedCVOptimizer:
         # Models to evaluate
         self.models = ['rf', 'xgb', 'dt']
         
+        self.confusion_matrices = {model: [] for model in self.models}        
         # Results storage (per configuration)
         self.current_config_results = []
         self.all_configurations_results = {}
@@ -247,21 +249,47 @@ class ModifiedNestedCVOptimizer:
         
         return study.best_params, study.best_value
 
-    def format_params_for_display(self, params: Dict[str, Any]) -> str:
-        """Format parameters for readable display."""
+    def calculate_confusion_matrix(self, y_true, y_pred, fold_idx: int, model_name: str) -> np.ndarray:
+        """
+        Calculate and store confusion matrix for the current fold.
         
-        key_params = []
-        if 'selector__k' in params:
-            key_params.append(f"k={params['selector__k']}")
-        if 'clf__n_estimators' in params:
-            key_params.append(f"n_est={params['clf__n_estimators']}")
-        if 'clf__max_depth' in params:
-            key_params.append(f"depth={params['clf__max_depth']}")
-        if 'clf__learning_rate' in params:
-            key_params.append(f"lr={params['clf__learning_rate']:.3f}")
-        
-        return "; ".join(key_params) if key_params else str(params)[:100]
-
+        Args:
+            y_true: True labels (encoded)
+            y_pred: Predicted labels (encoded)
+            fold_idx: Current fold index
+            model_name: Name of the model
+            
+        Returns:
+            Confusion matrix as numpy array
+        """
+        try:
+            # Calculate confusion matrix
+            cm = confusion_matrix(y_true, y_pred)
+            
+            # Store with metadata
+            cm_data = {
+                'fold': fold_idx,
+                'model': model_name,
+                'confusion_matrix': cm,
+                'true_labels': y_true,
+                'pred_labels': y_pred
+            }
+            
+            return cm_data
+            
+        except Exception as e:
+            print(f"Warning: Error calculating confusion matrix for {model_name} fold {fold_idx}: {e}")
+            # Return empty matrix with appropriate shape
+            n_classes = len(np.unique(y_true)) if len(np.unique(y_true)) > 0 else 2
+            empty_cm = np.zeros((n_classes, n_classes), dtype=int)
+            return {
+                'fold': fold_idx,
+                'model': model_name,
+                'confusion_matrix': empty_cm,
+                'true_labels': y_true,
+                'pred_labels': y_pred
+            }
+            
     def evaluate_single_fold(self, fold_data: Dict) -> List[Dict]:
         """Evaluate all models on a single fold's pre-split data."""
         
@@ -320,6 +348,10 @@ class ModifiedNestedCVOptimizer:
                 y_pred = final_model.predict(X_test)
                 y_proba = final_model.predict_proba(X_test)
                 
+                # Calculate and store confusion matrix
+                cm_data = self.calculate_confusion_matrix(y_test_encoded, y_pred, fold_id, model_name)
+                self.confusion_matrices[model_name].append(cm_data)
+                
                 # Calculate comprehensive metrics
                 metrics = self.calculate_comprehensive_metrics(y_test_encoded, y_pred, y_proba, positive_class_encoded)
                 
@@ -340,16 +372,23 @@ class ModifiedNestedCVOptimizer:
                     'Precision_Negative': round(metrics['precision_negative'], 4),
                     'Recall_Negative': round(metrics['recall_negative'], 4),
                     'F1_Negative': round(metrics['f1_negative'], 4),
-                    'AUC': round(metrics['auc'], 4),
-                    'Best_Params': self.format_params_for_display(best_params),
-                    'Optimization_Score': round(optimization_score, 4),
-                    'model_type': model_name.upper(),  # For internal processing
-                    'raw_params': best_params  # For detailed analysis
+                    
+                    
+                    # Feature selection info
+                    'Features_K': best_params.get('selector__k', 'N/A'),
+                    'Score_Function': best_params.get('selector__score_func', 'N/A'),
+                    
+                    'Best_Params': str(best_params)  # As string for easy viewing
                 }
+                
+                # Add each hyperparameter as a separate column for easier analysis
+                for param_name, param_value in best_params.items():
+                    result[f'HP_{param_name}'] = param_value
+                
                 
                 fold_results.append(result)
                 
-                print(f"      Acc: {metrics['accuracy']:.4f}, F1(+): {metrics['f1_positive']:.4f}, AUC: {metrics['auc']:.4f}")
+                print(f"      Acc: {metrics['accuracy']:.4f}, F1(+): {metrics['f1_positive']:.4f}")
                 
             except Exception as e:
                 print(f"      Error with {model_name.upper()}: {e}")
@@ -369,8 +408,8 @@ class ModifiedNestedCVOptimizer:
             'Precision_Weighted': 0.0, 'Recall_Weighted': 0.0, 'F1_Weighted': 0.0,
             'Precision_Positive': 0.0, 'Recall_Positive': 0.0, 'F1_Positive': 0.0,
             'Precision_Negative': 0.0, 'Recall_Negative': 0.0, 'F1_Negative': 0.0,
-            'AUC': 0.0, 'Best_Params': 'FAILED', 'Optimization_Score': 0.0,
-            'model_type': model_name.upper(), 'raw_params': {}
+            'Best_Params': 'FAILED', 'Optimization_Score': 0.0,
+            'model_name': model_name.upper(), 'raw_params': {}
         }
 
     def evaluate_configuration(self, config_key: str, fold_results: List[Dict]) -> pd.DataFrame:
@@ -404,68 +443,77 @@ class ModifiedNestedCVOptimizer:
         # Sort results: RF folds 1-5, then XGB folds 1-5, then DT folds 1-5
         sorted_results = []
         
-        for model_type in ['RF', 'XGB', 'DT']:
-            model_results = [r for r in self.current_config_results if r['model_type'] == model_type]
+        for model_name in ['RF', 'XGB', 'DT']:
+            model_results = [r for r in self.current_config_results if r['model_name'] == model_name]
             model_results.sort(key=lambda x: x['Fold'])  # Sort by fold number
             sorted_results.extend(model_results)
+            
+        results_df = pd.DataFrame(sorted_results)
+        
+        
+        # Add summary rows
+        summary_data = []
+        # Only include metrics that actually exist in the DataFrame
+        all_metric_columns = (['Accuracy', 'Precision_Macro', 'Recall_Macro', 'F1_Macro', 
+                            'Precision_Weighted', 'Recall_Weighted', 'F1_Weighted','Precision_Positive',
+                            'Recall_Positive', 'F1_Positive', 'Precision_Negative', 'Recall_Negative',
+                            'F1-Negative'                         
+                            ] 
+                        )
+        
+        # Filter to only include columns that exist in the DataFrame
+        metric_columns = [col for col in all_metric_columns if col in results_df.columns]
         
         # Add summary statistics (MEAN and STD for each model)
-        for model_type in ['RF', 'XGB', 'DT']:
-            model_data = [r for r in self.current_config_results if r['model_type'] == model_type]
+        for model_name in self.models:
+            # model_data = [r for r in self.current_config_results if r['model_name'] == model_name]
+            model_data = results_df[results_df['Model'] == model_name.upper()]
             
-            if model_data:
-                # Calculate means
-                mean_row = {
-                    'Model': model_type, 'Fold': 'MEAN',
-                    'Accuracy': round(np.mean([r['Accuracy'] for r in model_data]), 4),
-                    'Precision_Macro': round(np.mean([r['Precision_Macro'] for r in model_data]), 4),
-                    'Recall_Macro': round(np.mean([r['Recall_Macro'] for r in model_data]), 4),
-                    'F1_Macro': round(np.mean([r['F1_Macro'] for r in model_data]), 4),
-                    'Precision_Weighted': round(np.mean([r['Precision_Weighted'] for r in model_data]), 4),
-                    'Recall_Weighted': round(np.mean([r['Recall_Weighted'] for r in model_data]), 4),
-                    'F1_Weighted': round(np.mean([r['F1_Weighted'] for r in model_data]), 4),
-                    'Precision_Positive': round(np.mean([r['Precision_Positive'] for r in model_data]), 4),
-                    'Recall_Positive': round(np.mean([r['Recall_Positive'] for r in model_data]), 4),
-                    'F1_Positive': round(np.mean([r['F1_Positive'] for r in model_data]), 4),
-                    'Precision_Negative': round(np.mean([r['Precision_Negative'] for r in model_data]), 4),
-                    'Recall_Negative': round(np.mean([r['Recall_Negative'] for r in model_data]), 4),
-                    'F1_Negative': round(np.mean([r['F1_Negative'] for r in model_data]), 4),
-                    'AUC': round(np.mean([r['AUC'] for r in model_data]), 4),
-                    'Best_Params': 'MEAN_VALUES',
-                    'Optimization_Score': round(np.mean([r['Optimization_Score'] for r in model_data]), 4)
-                }
-                
-                # Calculate standard deviations
-                std_row = {
-                    'Model': model_type, 'Fold': 'STD',
-                    'Accuracy': round(np.std([r['Accuracy'] for r in model_data]), 4),
-                    'Precision_Macro': round(np.std([r['Precision_Macro'] for r in model_data]), 4),
-                    'Recall_Macro': round(np.std([r['Recall_Macro'] for r in model_data]), 4),
-                    'F1_Macro': round(np.std([r['F1_Macro'] for r in model_data]), 4),
-                    'Precision_Weighted': round(np.std([r['Precision_Weighted'] for r in model_data]), 4),
-                    'Recall_Weighted': round(np.std([r['Recall_Weighted'] for r in model_data]), 4),
-                    'F1_Weighted': round(np.std([r['F1_Weighted'] for r in model_data]), 4),
-                    'Precision_Positive': round(np.std([r['Precision_Positive'] for r in model_data]), 4),
-                    'Recall_Positive': round(np.std([r['Recall_Positive'] for r in model_data]), 4),
-                    'F1_Positive': round(np.std([r['F1_Positive'] for r in model_data]), 4),
-                    'Precision_Negative': round(np.std([r['Precision_Negative'] for r in model_data]), 4),
-                    'Recall_Negative': round(np.std([r['Recall_Negative'] for r in model_data]), 4),
-                    'F1_Negative': round(np.std([r['F1_Negative'] for r in model_data]), 4),
-                    'AUC': round(np.std([r['AUC'] for r in model_data]), 4),
-                    'Best_Params': 'STD_VALUES',
-                    'Optimization_Score': round(np.std([r['Optimization_Score'] for r in model_data]), 4)
-                }
-                
-                sorted_results.extend([mean_row, std_row])
-        
-        # Create final DataFrame with exact column order
-        columns_to_keep = ['Model', 'Fold', 'Accuracy', 'Precision_Macro', 'Recall_Macro', 'F1_Macro',
-                          'Precision_Weighted', 'Recall_Weighted', 'F1_Weighted', 'Precision_Positive',
-                          'Recall_Positive', 'F1_Positive', 'Precision_Negative', 'Recall_Negative', 
-                          'F1_Negative', 'AUC', 'Best_Params', 'Optimization_Score']
-        
-        df = pd.DataFrame(sorted_results)
-        return df[columns_to_keep]
+            
+            if model_data.empty:
+                print(f"Warning: No data found for model {model_name}")
+                continue
+            
+            # Mean row
+            mean_row = {
+                'Model': model_name.upper(),
+                'Fold': 'MEAN',
+                'Features_K': 'N/A',
+                'Score_Function': 'N/A',
+                'Best_Params': 'N/A'
+            }
+            
+            for metric in metric_columns:
+                if metric in model_data.columns:
+                    mean_row[metric] = round(model_data[metric].mean(), 4)
+                else:
+                    mean_row[metric] = 0.0
+            summary_data.append(mean_row)
+            
+            # Std row  
+            std_row = {
+                'Model': model_name.upper(),
+                'Fold': 'STD',
+                'Features_K': 'N/A',
+                'Score_Function': 'N/A',
+                'Best_Params': 'N/A'
+            }
+            for metric in metric_columns:
+                if metric in model_data.columns:
+                    std_row[metric] = round(model_data[metric].std(), 4)
+                else:
+                    std_row[metric] = 0.0
+            summary_data.append(std_row)
+            
+        # Combine all results
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            final_df = pd.concat([results_df, summary_df], ignore_index=True)
+        else:
+            final_df = results_df
+            
+        return final_df
+
 
     def save_configuration_results(self, config_key: str, base_save_path: str):
         """Save results for a specific configuration."""
@@ -483,61 +531,7 @@ class ModifiedNestedCVOptimizer:
         print(f"  Main results: {save_path}")
         print(f"  Format: {len(config_df)} rows (15 individual + 6 summary)")
         
-        # Save hyperparameter analysis
-        self._save_hyperparameter_analysis(config_key, base_save_path)
-
-    def _save_hyperparameter_analysis(self, config_key: str, base_save_path: str):
-        """Save detailed hyperparameter analysis for a configuration."""
         
-        hp_data = []
-        config_results = self.current_config_results if self.current_config == config_key else []
-        
-        for result in config_results:
-            if result.get('raw_params') and result['raw_params']:
-                params = result['raw_params']
-                
-                hp_row = {
-                    'Model': result['model_type'],
-                    'Fold': result['Fold'],
-                    'F1_Positive': result['F1_Positive'],
-                    'Accuracy': result['Accuracy'],
-                    'AUC': result['AUC'],
-                    'Optimization_Score': result['Optimization_Score'],
-                    'Selector_K': params.get('selector__k', 'N/A'),
-                    'Score_Function': params.get('selector__score_func', 'N/A')
-                }
-                
-                # Add model-specific parameters
-                if result['model_type'] == 'RF':
-                    hp_row.update({
-                        'N_Estimators': params.get('clf__n_estimators', 'N/A'),
-                        'Max_Depth': params.get('clf__max_depth', 'N/A'),
-                        'Min_Samples_Split': params.get('clf__min_samples_split', 'N/A'),
-                        'Class_Weight': params.get('clf__class_weight', 'N/A')
-                    })
-                elif result['model_type'] == 'XGB':
-                    hp_row.update({
-                        'N_Estimators': params.get('clf__n_estimators', 'N/A'),
-                        'Max_Depth': params.get('clf__max_depth', 'N/A'),
-                        'Learning_Rate': params.get('clf__learning_rate', 'N/A'),
-                        'Subsample': params.get('clf__subsample', 'N/A')
-                    })
-                elif result['model_type'] == 'DT':
-                    hp_row.update({
-                        'Criterion': params.get('clf__criterion', 'N/A'),
-                        'Max_Depth': params.get('clf__max_depth', 'N/A'),
-                        'Min_Samples_Split': params.get('clf__min_samples_split', 'N/A'),
-                        'Class_Weight': params.get('clf__class_weight', 'N/A')
-                    })
-                
-                hp_data.append(hp_row)
-        
-        if hp_data:
-            hp_df = pd.DataFrame(hp_data)
-            hp_path = os.path.join(base_save_path, f'{config_key}_hyperparameter_analysis.csv')
-            hp_df.to_csv(hp_path, index=False)
-            print(f"  Hyperparameter analysis: {hp_path}")
-
     def run_all_configurations(self, all_global_norm_results: Dict, base_save_path: str) -> Dict[str, pd.DataFrame]:
         """
         Run nested CV for all configurations and save results.
@@ -598,7 +592,7 @@ class ModifiedNestedCVOptimizer:
                     'Model': row['Model'],
                     'Accuracy': row['Accuracy'],
                     'F1_Positive': row['F1_Positive'],
-                    'AUC': row['AUC'],
+                    # 'AUC': row['AUC'],
                     'Precision_Positive': row['Precision_Positive'],
                     'Recall_Positive': row['Recall_Positive']
                 })
@@ -697,4 +691,100 @@ class ModifiedNestedCVOptimizer:
         comparison_df = pd.DataFrame(comparison_data)
         return comparison_df.sort_values('F1_Positive_Mean', ascending=False)
 
+    def plot_confusion_matrices(self, save_path: str = None, figsize: Tuple[int, int] = (15, 10)):
+        """
+        Plot confusion matrices for all models.
+        Shows both individual fold matrices and aggregated matrices.
+        """
+        n_models = len(self.models)
+        
+        # Create subplots: 2 rows (individual folds + aggregated), n_models columns
+        fig, axes = plt.subplots(2, n_models, figsize=figsize)
+        if n_models == 1:
+            axes = axes.reshape(2, 1)
+        
+        # For 3-class implementation, use class names
+        if hasattr(self, 'class_names'):
+            class_labels = self.class_names
 
+        for model_idx, model_name in enumerate(self.models):
+            if not self.confusion_matrices[model_name]:
+                continue
+                
+            # Plot 1: Individual fold matrices (small multiples)
+            cms = [cm_data['confusion_matrix'] for cm_data in self.confusion_matrices[model_name]]
+            
+            if cms:
+                # Show aggregated confusion matrix (sum across folds)
+                aggregated_cm = np.sum(cms, axis=0)
+                
+                # Normalize for display (showing percentages)
+                cm_normalized = aggregated_cm.astype('float') / aggregated_cm.sum(axis=1)[:, np.newaxis]
+                
+                # Plot aggregated confusion matrix
+                sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                        xticklabels=class_labels, yticklabels=class_labels,
+                        ax=axes[0, model_idx], cbar_kws={'label': 'Proportion'})
+                axes[0, model_idx].set_title(f'{model_name.upper()}: Aggregated CM\n(Normalized)')
+                axes[0, model_idx].set_xlabel('Predicted')
+                axes[0, model_idx].set_ylabel('True')
+                
+                # Plot aggregated confusion matrix with raw counts
+                sns.heatmap(aggregated_cm, annot=True, fmt='d', cmap='Oranges',
+                        xticklabels=class_labels, yticklabels=class_labels,
+                        ax=axes[1, model_idx], cbar_kws={'label': 'Count'})
+                axes[1, model_idx].set_title(f'{model_name.upper()}: Aggregated CM\n(Raw Counts)')
+                axes[1, model_idx].set_xlabel('Predicted')
+                axes[1, model_idx].set_ylabel('True')
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Confusion matrices saved to: {save_path}")
+        else:
+            plt.show()
+            
+    
+    def plot_individual_fold_cms(self, model_name: str, save_path: str = None, figsize: Tuple[int, int] = (12, 4)):
+        """
+        Plot confusion matrices for each fold of a specific model.
+        """
+        if model_name not in self.confusion_matrices or not self.confusion_matrices[model_name]:
+            print(f"No confusion matrices available for model: {model_name}")
+            return
+        
+        n_folds = len(self.confusion_matrices[model_name])
+        fig, axes = plt.subplots(1, n_folds, figsize=figsize)
+        if n_folds == 1:
+            axes = [axes]
+        
+        # Determine class labels
+        if hasattr(self, 'class_names'):
+            class_labels = self.class_names
+        else:
+            # class_labels = [f'Not_{self.positive_class}', self.positive_class]
+            pass
+        
+        for fold_idx, cm_data in enumerate(self.confusion_matrices[model_name]):
+            cm = cm_data['confusion_matrix']
+            
+            # Normalize confusion matrix
+            cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+            
+            sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                    xticklabels=class_labels, yticklabels=class_labels,
+                    ax=axes[fold_idx], cbar=fold_idx == n_folds-1)
+            axes[fold_idx].set_title(f'Fold {fold_idx + 1}')
+            axes[fold_idx].set_xlabel('Predicted')
+            if fold_idx == 0:
+                axes[fold_idx].set_ylabel('True')
+        
+        plt.suptitle(f'{model_name.upper()}: Confusion Matrices by Fold')
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Individual fold confusion matrices saved to: {save_path}")
+        else:
+            plt.show()

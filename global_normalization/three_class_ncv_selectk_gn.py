@@ -153,71 +153,6 @@ class ModifiedNestedCVOptimizer:
         ])
         return pipeline
     
-    def calculate_auc_scores(self, y_true, y_proba, fold_idx: int, model_name: str) -> Dict[str, Any]:
-        """
-        Calculate AUC scores for multi-class classification using one-vs-rest approach.
-        
-        Args:
-            y_true: True labels (encoded)
-            y_proba: Predicted probabilities for each class
-            fold_idx: Current fold index
-            model_name: Name of the model
-            
-        Returns:
-            Dictionary containing AUC scores
-        """
-        auc_data = {
-            'fold': fold_idx,
-            'model': model_name,
-            'macro_auc': 0.0,
-            'micro_auc': 0.0
-        }
-        
-        try:
-            # Binarize the output for multi-class AUC
-            y_true_bin = label_binarize(y_true, classes=range(self.n_classes))
-            
-            # Handle case where test set doesn't contain all classes
-            if y_true_bin.shape[1] < self.n_classes:
-                # Pad with zeros for missing classes
-                missing_classes = self.n_classes - y_true_bin.shape[1]
-                padding = np.zeros((y_true_bin.shape[0], missing_classes))
-                y_true_bin = np.hstack([y_true_bin, padding])
-            
-            # Calculate per-class AUC scores (one-vs-rest)
-            per_class_aucs = []
-            for i, class_name in enumerate(self.class_names):
-                if i < y_proba.shape[1] and np.sum(y_true_bin[:, i]) > 0:
-                    try:
-                        auc_score = roc_auc_score(y_true_bin[:, i], y_proba[:, i])
-                        auc_data[f'auc_{class_name}'] = auc_score
-                        per_class_aucs.append(auc_score)
-                    except ValueError:
-                        # Handle cases where only one class is present
-                        auc_data[f'auc_{class_name}'] = 0.0
-                else:
-                    # Handle missing class in test set
-                    auc_data[f'auc_{class_name}'] = 0.0
-            
-            # Calculate macro AUC (average of per-class AUCs)
-            if per_class_aucs:
-                auc_data['macro_auc'] = np.mean(per_class_aucs)
-            
-            # Calculate micro AUC (if possible)
-            if y_proba.shape[1] >= self.n_classes and np.sum(y_true_bin) > 0:
-                try:
-                    auc_data['micro_auc'] = roc_auc_score(y_true_bin, y_proba, 
-                                                        multi_class='ovr', average='micro')
-                except ValueError:
-                    auc_data['micro_auc'] = 0.0
-            
-        except Exception as e:
-            print(f"Warning: Error calculating AUC scores for {model_name} fold {fold_idx}: {e}")
-            # Return default values
-            for class_name in self.class_names:
-                auc_data[f'auc_{class_name}'] = 0.0
-        
-        return auc_data
 
     def calculate_comprehensive_metrics(self, y_true, y_pred, y_proba) -> Dict[str, float]:
         """Calculate comprehensive binary classification metrics exactly like your original."""
@@ -447,8 +382,7 @@ class ModifiedNestedCVOptimizer:
                     'Precision_Weighted': round(metrics['precision_weighted'], 4),
                     'Recall_Weighted': round(metrics['recall_weighted'], 4),
                     'F1_Weighted': round(metrics['f1_weighted'], 4),
-                    # 'AUC_Macro': round(auc_data['macro_auc'], 4),
-                    # 'AUC_Micro': round(auc_data['micro_auc'], 4),
+
                     
                     # Feature selection info
                     'Features_K': best_params.get('selector__k', 'N/A'),
