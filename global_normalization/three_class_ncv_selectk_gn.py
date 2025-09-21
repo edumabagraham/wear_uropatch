@@ -433,7 +433,7 @@ class ModifiedNestedCVOptimizer:
                 # Calculate comprehensive metrics
                 metrics = self.calculate_comprehensive_metrics(y_test_encoded, y_pred, y_proba)
                 
-                auc_data = self.calculate_auc_scores(y_test_encoded, y_proba, fold_id, model_name)
+                # auc_data = self.calculate_auc_scores(y_test_encoded, y_proba, fold_id, model_name)
 
                 
                 # Store result in exact format of your original pipeline
@@ -447,8 +447,8 @@ class ModifiedNestedCVOptimizer:
                     'Precision_Weighted': round(metrics['precision_weighted'], 4),
                     'Recall_Weighted': round(metrics['recall_weighted'], 4),
                     'F1_Weighted': round(metrics['f1_weighted'], 4),
-                    'AUC_Macro': round(auc_data['macro_auc'], 4),
-                    'AUC_Micro': round(auc_data['micro_auc'], 4),
+                    # 'AUC_Macro': round(auc_data['macro_auc'], 4),
+                    # 'AUC_Micro': round(auc_data['micro_auc'], 4),
                     
                     # Feature selection info
                     'Features_K': best_params.get('selector__k', 'N/A'),
@@ -462,7 +462,7 @@ class ModifiedNestedCVOptimizer:
                     result[f'Precision_{class_name}'] = round(metrics.get(f'precision_{class_name}', 0.0), 4)
                     result[f'Recall_{class_name}'] = round(metrics.get(f'recall_{class_name}', 0.0), 4)
                     result[f'F1_{class_name}'] = round(metrics.get(f'f1_{class_name}', 0.0), 4)
-                    result[f'AUC_{class_name}'] = round(auc_data.get(f'auc_{class_name}', 0.0), 4)
+                    # result[f'AUC_{class_name}'] = round(auc_data.get(f'auc_{class_name}', 0.0), 4)
                     
                 # Add each hyperparameter as a separate column for easier analysis
                 for param_name, param_value in best_params.items():
@@ -470,7 +470,8 @@ class ModifiedNestedCVOptimizer:
                 
                 fold_results.append(result)
                 
-                print(f"      Acc: {metrics['accuracy']:.4f}, F1(+): {metrics['f1_macro']:.4f}, AUC: {metrics['auc']:.4f}")
+                # print(f"      Acc: {metrics['accuracy']:.4f}, F1(+): {metrics['f1_macro']:.4f}, AUC: {metrics['auc']:.4f}")
+                print(f"      Acc: {metrics['accuracy']:.4f}, F1(+): {metrics['f1_macro']:.4f}")
                 
             except Exception as e:
                 print(f"      Error with {model_name.upper()}: {e}")
@@ -488,7 +489,8 @@ class ModifiedNestedCVOptimizer:
             'Fold': fold_id,
             'Accuracy': 0.0, 'Precision_Macro': 0.0, 'Recall_Macro': 0.0, 'F1_Macro': 0.0,
             'Precision_Weighted': 0.0, 'Recall_Weighted': 0.0, 'F1_Weighted': 0.0,
-            'AUC': 0.0, 'Best_Params': 'FAILED', 'Optimization_Score': 0.0,
+            # 'AUC': 0.0, 
+            'Best_Params': 'FAILED', 'Optimization_Score': 0.0,
             'model_type': model_name.upper(), 'raw_params': {}
         }
 
@@ -524,7 +526,7 @@ class ModifiedNestedCVOptimizer:
         sorted_results = []
         
         for model_name in self.models:
-            model_results = [r for r in self.current_config_results if r['model_name'] == model_name.upper()]
+            model_results = [r for r in self.current_config_results if r['Model'] == model_name.upper()]
             model_results.sort(key=lambda x: x['Fold'])  # Sort by fold number
             sorted_results.extend(model_results)
         
@@ -535,12 +537,16 @@ class ModifiedNestedCVOptimizer:
         summary_data = []
         # Only include metrics that actually exist in the DataFrame
         all_metric_columns = (['Accuracy', 'Precision_Macro', 'Recall_Macro', 'F1_Macro', 
-                            'Precision_Weighted', 'Recall_Weighted', 'F1_Weighted',
-                            'AUC_Macro', 'AUC_Micro'] + 
+                            'Precision_Weighted', 'Recall_Weighted', 'F1_Weighted'
+                            # 'AUC_Macro', 'AUC_Micro'
+                            ] 
+                        + 
                         [f'Precision_{class_name}' for class_name in self.class_names] +
                         [f'Recall_{class_name}' for class_name in self.class_names] +
-                        [f'F1_{class_name}' for class_name in self.class_names] +
-                        [f'AUC_{class_name}' for class_name in self.class_names])
+                        [f'F1_{class_name}' for class_name in self.class_names] 
+                        # +
+                        # [f'AUC_{class_name}' for class_name in self.class_names]
+                        )
         
         # Filter to only include columns that exist in the DataFrame
         metric_columns = [col for col in all_metric_columns if col in results_df.columns]
@@ -586,14 +592,14 @@ class ModifiedNestedCVOptimizer:
                     std_row[metric] = 0.0
             summary_data.append(std_row)
             
-            # Combine all results
-            if summary_data:
-                summary_df = pd.DataFrame(summary_data)
-                final_df = pd.concat([results_df, summary_df], ignore_index=True)
-            else:
-                final_df = results_df
+        # Combine all results
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            final_df = pd.concat([results_df, summary_df], ignore_index=True)
+        else:
+            final_df = results_df
             
-            return final_df
+        return final_df
 
     def save_configuration_results(self, config_key: str, base_save_path: str):
         """Save results for a specific configuration."""
@@ -643,6 +649,13 @@ class ModifiedNestedCVOptimizer:
             
             # Save results
             self.save_configuration_results(config_key, base_save_path)
+
+            plot_dir = f"plots_{config_key}_binary"
+            os.makedirs(plot_dir, exist_ok=True)
+        
+            # Confusion matrices - aggregated view
+            self.plot_confusion_matrices(save_path=f"{plot_dir}/confusion_matrices.png")
+            
         
         # Create overall comparison
         self._create_overall_summary(base_save_path)
@@ -671,7 +684,7 @@ class ModifiedNestedCVOptimizer:
                     'Model': row['Model'],
                     'Accuracy': row['Accuracy'],
                     'F1_Macro': row['F1_Macro'],
-                    'AUC': row['AUC'],
+                    # 'AUC': row['AUC'],
                     'Precision_Macro': row['Precision_Macro'],
                     'Recall_Macro': row['Recall_Macro']
                 })
@@ -686,7 +699,7 @@ class ModifiedNestedCVOptimizer:
             print(f"Overall comparison saved: {comparison_path}")
             print(f"\nTOP 5 PERFORMERS:")
             print("-" * 60)
-            top_performers = comparison_df.head()[['Configuration', 'Model', 'F1_Macro', 'Accuracy', 'AUC']]
+            top_performers = comparison_df.head()[['Configuration', 'Model', 'F1_Macro', 'Accuracy']]
             print(top_performers.to_string(index=False))
 
     def get_best_configuration(self) -> Tuple[str, str, float]:
@@ -763,8 +776,8 @@ class ModifiedNestedCVOptimizer:
                     'Accuracy_Std': std_values['Accuracy'] if std_values is not None else 0.0,
                     'F1_Macro_Mean': mean_row['F1_Macro'],
                     'F1_Macro_Std': std_values['F1_Macro'] if std_values is not None else 0.0,
-                    'AUC_Mean': mean_row['AUC'],
-                    'AUC_Std': std_values['AUC'] if std_values is not None else 0.0
+                    # 'AUC_Mean': mean_row['AUC'],
+                    # 'AUC_Std': std_values['AUC'] if std_values is not None else 0.0
                 })
         
         comparison_df = pd.DataFrame(comparison_data)
