@@ -314,7 +314,6 @@ class ModifiedNestedCVOptimizer:
         self.current_n_features = X_train.shape[1]
         
         
-        
         # Encode labels
         self.label_encoder = LabelEncoder()
         y_train_encoded = self.label_encoder.fit_transform(y_train)

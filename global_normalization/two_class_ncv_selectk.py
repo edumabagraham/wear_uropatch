@@ -357,7 +357,7 @@ class ModifiedNestedCVOptimizer:
                 
                 # Store result in exact format of your original pipeline
                 result = {
-                    'Model': f"{fold_id}{model_name.upper()}",  # e.g., "1RF", "2XGB"
+                    'Model': f"{model_name.upper()}",  # e.g., "1RF", "2XGB"
                     'Fold': fold_id,
                     'Accuracy': round(metrics['accuracy'], 4),
                     'Precision_Macro': round(metrics['precision_macro'], 4),
@@ -402,7 +402,7 @@ class ModifiedNestedCVOptimizer:
         """Create default result for failed optimization."""
         
         return {
-            'Model': f"{fold_id}{model_name.upper()}",
+            'Model': f"{model_name.upper()}",
             'Fold': fold_id,
             'Accuracy': 0.0, 'Precision_Macro': 0.0, 'Recall_Macro': 0.0, 'F1_Macro': 0.0,
             'Precision_Weighted': 0.0, 'Recall_Weighted': 0.0, 'F1_Weighted': 0.0,
@@ -443,8 +443,8 @@ class ModifiedNestedCVOptimizer:
         # Sort results: RF folds 1-5, then XGB folds 1-5, then DT folds 1-5
         sorted_results = []
         
-        for model_name in ['RF', 'XGB', 'DT']:
-            model_results = [r for r in self.current_config_results if r['model_name'] == model_name]
+        for model_name in self.models:
+            model_results = [r for r in self.current_config_results if r['Model'] == model_name]
             model_results.sort(key=lambda x: x['Fold'])  # Sort by fold number
             sorted_results.extend(model_results)
             
@@ -457,7 +457,7 @@ class ModifiedNestedCVOptimizer:
         all_metric_columns = (['Accuracy', 'Precision_Macro', 'Recall_Macro', 'F1_Macro', 
                             'Precision_Weighted', 'Recall_Weighted', 'F1_Weighted','Precision_Positive',
                             'Recall_Positive', 'F1_Positive', 'Precision_Negative', 'Recall_Negative',
-                            'F1-Negative'                         
+                            'F1_Negative'                         
                             ] 
                         )
         
