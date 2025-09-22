@@ -150,7 +150,7 @@ def rank_based_selection(df, metric='f1', top_n=10, ranking_method='combined_ran
     selected[f'{metric}_lower_95ci'] = selected[mean_col] - 1.96 * selected[std_col]
     selected[f'{metric}_upper_95ci'] = selected[mean_col] + 1.96 * selected[std_col]
     
-    return selected, ranking_col
+    return selected, ranking_col, df
 
 def find_pareto_front(df, mean_col, std_col):
     """Find Pareto optimal solutions (maximize mean, minimize std)."""

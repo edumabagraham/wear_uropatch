@@ -176,18 +176,6 @@ class ModifiedNestedCVOptimizer:
                 'f1_negative': f1_score(y_true, y_pred, pos_label=1-positive_class_encoded, zero_division=0)
             }
             
-            # Calculate AUC
-            if len(np.unique(y_true)) > 1 and y_proba is not None:
-                if y_proba.shape[1] == 2:
-                    y_proba_pos = y_proba[:, positive_class_encoded]
-                else:
-                    y_proba_pos = y_proba.ravel()
-                
-                y_true_binary = (y_true == positive_class_encoded).astype(int)
-                auc_score = roc_auc_score(y_true_binary, y_proba_pos)
-                metrics['auc'] = auc_score
-            else:
-                metrics['auc'] = 0.0
             
             return metrics
             
@@ -297,27 +285,55 @@ class ModifiedNestedCVOptimizer:
         train_features = fold_data['train_features']
         test_features = fold_data['test_features']
         
+        # ======================DEBUG LINES================================
+        print(f"\n=== DEBUG evaluate_single_fold ===")
+        print(f"Fold data keys: {list(fold_data.keys())}")
+        print(f"Train features shape: {train_features.shape}")
+        print(f"Train features columns: {list(train_features.columns)}")
+        
+        # Check if required columns exist
+        required_cols = ['label', 'experiment_id']
+        missing_cols = [col for col in required_cols if col not in train_features.columns]
+        if missing_cols:
+            print(f"ERROR: Missing required columns: {missing_cols}")
+            return []
+        # ===================================================================
+        
         print(f"\n  OUTER FOLD {fold_id}")
         print(f"  Train: {train_features.shape}, Test: {test_features.shape}")
+        try:
+            # Prepare data
+            X_train = train_features.drop(columns=['label', 'experiment_id'])
+            y_train = train_features['label']
+            groups_train = train_features['experiment_id']
+            
+            X_test = test_features.drop(columns=['label', 'experiment_id'])
+            y_test = test_features['label']
+            
+            # Set current number of features for search space
+            self.current_n_features = X_train.shape[1]
+            
+            # Encode labels
+            label_encoder = LabelEncoder()
+            y_train_encoded = label_encoder.fit_transform(y_train)
+            y_test_encoded = label_encoder.transform(y_test)
+            
+            # ======================DEBUG LINES================================
+            # Identify the encoded value for the positive class
+            if self.positive_class not in y_train.unique():
+                print(f"ERROR: Positive class '{self.positive_class}' not found in labels: {y_train.unique()}")
+                return []
+                
+            positive_class_encoded = label_encoder.transform([self.positive_class])[0]
+            print(f"  Positive class '{self.positive_class}' encoded as: {positive_class_encoded}")
+            # ===================================================================
+            
+            # Identify the encoded value for the positive class
+            # positive_class_encoded = label_encoder.transform([self.positive_class])[0]
         
-        # Prepare data
-        X_train = train_features.drop(columns=['label', 'experiment_id'])
-        y_train = train_features['label']
-        groups_train = train_features['experiment_id']
-        
-        X_test = test_features.drop(columns=['label', 'experiment_id'])
-        y_test = test_features['label']
-        
-        # Set current number of features for search space
-        self.current_n_features = X_train.shape[1]
-        
-        # Encode labels
-        label_encoder = LabelEncoder()
-        y_train_encoded = label_encoder.fit_transform(y_train)
-        y_test_encoded = label_encoder.transform(y_test)
-        
-        # Identify the encoded value for the positive class
-        positive_class_encoded = label_encoder.transform([self.positive_class])[0]
+        except Exception as e:
+            print(f"ERROR in data preparation: {e}")
+            return []
         
         fold_results = []
         
@@ -440,6 +456,17 @@ class ModifiedNestedCVOptimizer:
     def _create_exact_format_dataframe(self) -> pd.DataFrame:
         """Create DataFrame in exact format of your original pipeline."""
         
+        # ======================DEBUG LINES================================
+        print(f"\n=== DEBUG _create_exact_format_dataframe ===")
+        print(f"Results length: {len(self.current_config_results)}")
+        if self.current_config_results:
+            print(f"Sample result keys: {list(self.current_config_results[0].keys())}")
+            print(f"Sample result: {self.current_config_results[0]}")
+        else:
+            print("ERROR: No results found!")
+            return pd.DataFrame()  # Return empty DataFrame
+        # ===================================================================
+        
         # Sort results: RF folds 1-5, then XGB folds 1-5, then DT folds 1-5
         sorted_results = []
         
@@ -450,6 +477,15 @@ class ModifiedNestedCVOptimizer:
             
         results_df = pd.DataFrame(sorted_results)
         
+        # ======================DEBUG LINES================================
+        # DEBUG: Check DataFrame
+        print(f"DataFrame shape: {results_df.shape}")
+        print(f"DataFrame columns: {list(results_df.columns)}")
+        
+        if results_df.empty:
+            print("ERROR: Results DataFrame is empty!")
+            return results_df
+        # ===================================================================
         
         # Add summary rows
         summary_data = []
