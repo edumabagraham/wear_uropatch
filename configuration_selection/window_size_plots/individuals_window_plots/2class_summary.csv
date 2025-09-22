@@ -1,0 +1,5 @@
+Metric,Best_Score,Std_Dev,Window_Size,Model,Configuration
+Accuracy,0.7325,0.0295,3s,XGB,3s+XGB
+Precision,0.7241,0.0467,3s,XGB,3s+XGB
+Recall,0.7279,0.0683,5s_0.8,RF,5s_0.8+RF
+F1-Score,0.7202,0.0410,3s,RF,3s+RF
